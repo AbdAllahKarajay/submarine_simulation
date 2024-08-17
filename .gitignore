@@ -1,1 +1,7 @@
 .parcel-cache
+models
+node_modules
+dist
+.vscode
+__MACOSX
+textures

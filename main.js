@@ -1,17 +1,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-
+import { GUI } from "dat.gui";
+import SubmarineRotation from "/SubmarineRotation";
+import WithdrawalMovement from "/WithdrawalMovement"
 // Create the scene
 const scene = new THREE.Scene();
 
 // Create and position the camera
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 0, 7); // Position the camera so it's outside of the submarine
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 0, 7);
 
-camera.far = 1000;
-camera.near = 0.1;
-camera.fov = 60;
 // Create and configure the renderer
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -26,9 +25,9 @@ controls.enableZoom = true;
 // Load the panoramic skybox image
 const textureLoader = new THREE.TextureLoader();
 textureLoader.load(
-    new URL('./textures/panorama.png', import.meta.url).href, // Path to your panoramic image
+    './textures/panorama.png', // Path to your panoramic image
     (texture) => {
-        texture.mapping = THREE.EquirectangularReflectionMapping; // Set the correct mapping for panoramic images
+        texture.mapping = THREE.EquirectangularReflectionMapping;
         scene.background = texture;
     },
     undefined,
@@ -39,13 +38,14 @@ textureLoader.load(
 
 // Load the submarine model
 const gltfLoader = new GLTFLoader();
-let submarine;
+var submarine;
 gltfLoader.load(
-    new URL('./models/submarine.glb', import.meta.url).href, // Adjust the path to your GLB file
+    './models/submarine.glb', // Adjust the path to your GLB file
     (gltf) => {
         submarine = gltf.scene;
-        submarine.scale.set(10,10,10);
-        submarine.position.set(0, 0, 0); // Set initial position of the submarine
+        submarine.scale.set(10, 10, 10);
+        submarine.position.set(0, 50, 0);
+        console.log(submarine.position)
         scene.add(submarine);
     },
     (xhr) => {
@@ -55,168 +55,120 @@ gltfLoader.load(
         console.error('An error happened', error);
     }
 );
+
+
+// Load the underwater terrain model
 const terrainLoader = new GLTFLoader();
 terrainLoader.load(
-  'models/underwater_terrain.glb', // adjust the path to your terrain model
-  (gltf) => {
-    const terrainModel = gltf.scene;
-    terrainModel.scale.set(100, 100, 100); // adjust the scale to fit your scene
-    terrainModel.position.set(0,-60,0);
-    scene.add(terrainModel);
-  },
-  (xhr) => {
-    console.log((xhr.loaded / xhr.total * 100) + '% loaded');
-  },
-  (error) => {
-    console.error('Error loading terrain model:', error);
-  }
+    './models/underwater_terrain.glb', // Adjust the path to your terrain model
+    (gltf) => {
+        const terrainModel = gltf.scene;
+        terrainModel.scale.set(100, 100, 100);
+        terrainModel.position.set(0, -260, 0);
+        scene.add(terrainModel);
+    },
+    (xhr) => {
+        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    },
+    (error) => {
+        console.error('Error loading terrain model:', error);
+    }
 );
 
 // Load the seaweed model
 const seaweedLoader = new GLTFLoader();
 seaweedLoader.load(
-  'models/seaweed.glb', // adjust the path to your seaweed model
-  (gltf) => {
-    const seaweedModel = gltf.scene;
-
-    // Create 50 instances of the seaweed model
-    for (let i = 0; i < 200; i++) {
-        const seaweedInstance = seaweedModel.clone();
-        seaweedInstance.scale.set(10, 10, 10);
-      
-        // Randomize the position wihin a larger cube
-        const cubeSize = 1500; // adjust to change the size of the distribution cube
-        const x = Math.random() * cubeSize - cubeSize / 2;
-        const y = -50
-        const z = Math.random() * cubeSize - cubeSize / 2;
-      
-        seaweedInstance.position.set(x, y, z);
-        scene.add(seaweedInstance);
-      }
-  },
-  (xhr) => {
-    console.log((xhr.loaded / xhr.total * 100) + '% loaded');
-  },
-  (error) => {
-    console.error('Error loading seaweed model:', error);
-  }
+    './models/seaweed.glb', // Adjust the path to your seaweed model
+    (gltf) => {
+        const seaweedModel = gltf.scene;
+        // Create 200 instances of the seaweed model
+        for (let i = 0; i < 200; i++) {
+            const seaweedInstance = seaweedModel.clone();
+            seaweedInstance.scale.set(5, 5, 5);
+            // Randomize the position within a larger cube
+            const cubeSize = 1500;
+            const x = Math.random() * cubeSize - cubeSize / 2;
+            const y = -250;
+            const z = Math.random() * cubeSize - cubeSize / 2;
+            seaweedInstance.position.set(x, y, z);
+            scene.add(seaweedInstance);
+        }
+    },
+    (xhr) => {
+        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    },
+    (error) => {
+        console.error('Error loading seaweed model:', error);
+    }
 );
 // Add lighting
 const ambientLight = new THREE.AmbientLight(0x404040);
 scene.add(ambientLight);
-
 const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-directionalLight.position.set(0, 10, 10); // Position the light like the sun
+directionalLight.position.set(0, 10, 10);
 scene.add(directionalLight);
+// Submarine rotation object and GUI setup
+const submarineRotation = new SubmarineRotation(); // Assuming SubmarineRotation is defined elsewhere
+const withdrawalMovement = new WithdrawalMovement();
+const SubmarineForcers = {
+    F_torque: 0,
+    tau_z: 0,
+    I_z: 1,
+    tau_y: 0,
+    I_y: 1,
+    tanks_water_volume: 20,
+    fan_speed: 0,
 
-// Variables for submarine movement
-let moveForward = false;
-let moveBackward = false;
-let moveLeft = false;
-let moveRight = false;
-let rotateLeft = false;
-let rotateRight = false;
-let rotateUp = false;
-let rotateDown = false;
+};
+const AutoMovementVars = {
+    desired_depth: 0
+};
 
-// Event listeners for keyboard controls
-document.addEventListener('keydown', (event) => {
-    switch (event.key) {
-        case 'w':
-            moveForward = true;
-            break;
-        case 's':
-            moveBackward = true;
-            break;
-        case 'a':
-            moveLeft = true;
-            break;
-        case 'd':
-            moveRight = true;
-            break;
-        case 'ArrowLeft':
-            rotateLeft = true;
-            break;
-        case 'ArrowRight':
-            rotateRight = true;
-            break;
-        case 'ArrowUp':
-            rotateUp = true;
-            break;
-        case 'ArrowDown':
-            rotateDown = true;
-            break;
-    }
-});
 
-document.addEventListener('keyup', (event) => {
-    switch (event.key) {
-        case 'w':
-            moveForward = false;
-            break;
-        case 's':
-            moveBackward = false;
-            break;
-        case 'a':
-            moveLeft = false;
-            break;
-        case 'd':
-            moveRight = false;
-            break;
-        case 'ArrowLeft':
-            rotateLeft = false;
-            break;
-        case 'ArrowRight':
-            rotateRight = false;
-            break;
-        case 'ArrowUp':
-            rotateUp = false;
-            break;
-        case 'ArrowDown':
-            rotateDown = false;
-            break;
-    }
-});
+var gui = new GUI();
+var rotationFolder = gui.addFolder('Submarine Rotation:');
+rotationFolder.add(SubmarineForcers, 'F_torque', -200, 200).name('Torque (τz)').step(10);
+// rotationFolder.add(SubmarineForcers, 'tau_z', -1, 1).name('Torque (τz)').step(0.1);
+// rotationFolder.add(SubmarineForcers, 'I_z', 1, 10).name('Inertia (Iz)').step(0.1);
+// rotationFolder.add(SubmarineForcers, 'tau_y', -1, 1).name('Torque (τy)').step(0.1);
+// rotationFolder.add(SubmarineForcers, 'I_y', 1, 10).name('Inertia (Iy)').step(0.1);
+// rotationFolder.open();
 
-// Submarine movement logic
-function updateSubmarine() {
-    if (!submarine) return;
+//const depthController = gui.add({ text: 'Depth: '+ withdrawalMovement.position.y }, 'text').name('Depth');rotationFolder.open();
+var WithdrawalFolder = gui.addFolder('Withdrawal movement :');
+WithdrawalFolder.add(SubmarineForcers, 'tanks_water_volume', 0, 100).name('V.tanks_water cm3').step(1);
+WithdrawalFolder.add(SubmarineForcers, 'fan_speed', -10, 10).name('fan speed').step(0.1);
+WithdrawalFolder.open();
 
-    const moveSpeed = 0.1;
-    const rotationSpeed = 0.002;
+var moveFolder = gui.addFolder('Auto Movement :');
+WithdrawalFolder.add(AutoMovementVars, 'desired_depth', 0, 100).name('Desired Depth').step(1);
 
-    if (moveForward) submarine.translateZ(-moveSpeed);
-    if (moveBackward) submarine.translateZ(moveSpeed);
-    if (moveLeft) submarine.translateX(-moveSpeed);
-    if (moveRight) submarine.translateX(moveSpeed);
-
-    if (rotateLeft) submarine.rotation.y += rotationSpeed;
-    if (rotateRight) submarine.rotation.y -= rotationSpeed;
-    if (rotateLeft) submarine.rotation.y += rotationSpeed;
-    if (rotateRight) submarine.rotation.y -= rotationSpeed;
-    if (rotateUp) submarine.rotation.x += rotationSpeed;
-    if (rotateDown) submarine.rotation.x -= rotationSpeed;
-    
-}
+// Function to update the camera position based on the submarine's position
 function updateCamera() {
     if (!submarine) return;
-  
+    // console.log(submarine.position);ب
     camera.position.x = submarine.position.x;
-    camera.position.y = submarine.position.y ; // Keep the camera 5 units above the submarine
-    camera.position.z = submarine.position.z + 10; // Keep the camera 10 units behind the submarine
-    camera.lookAt(submarine.position); // Make the camera look at the submarine
-  }
-  
-  // Call the updateCamera function in the render loop
-  function animate() {
+    camera.position.y = submarine.position.y;
+    camera.position.z = submarine.position.z + 10;
+    camera.lookAt(submarine.position);
+}
+// Animation loop
+function animate() {
     requestAnimationFrame(animate);
-    controls.update();
-    updateSubmarine();
-    updateCamera(); // Update the camera position and orientation
-    renderer.render(scene, camera);
-  }
-animate();
+    if (submarine) {
+        submarineRotation.HorizontalAngularMotionInMoment(submarine, SubmarineForcers.F_torque,SubmarineForcers.tanks_water_volume*0.01);
 
+        // Update the submarine's position using the WithdrawalMovement position
+        withdrawalMovement.linearMotionInMoment(submarine, SubmarineForcers.tanks_water_volume*0.01, SubmarineForcers.fan_speed);
+        withdrawalMovement.autoChangeDepth(SubmarineForcers, AutoMovementVars.desired_depth);
+
+    }
+    gui.updateDisplay();
+    controls.update();
+    updateCamera();
+    renderer.render(scene, camera);
+}
+animate();
 // Handle window resize
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
